@@ -81,27 +81,24 @@ func getTasksRecursively(folder *ole.IDispatch) (tasks []Task) {
 		}
 		// Get more details, e.g. actions
 		definition := oleutil.MustGetProperty(task, "definition").ToIDispatch()
-		if definition != nil {
-			actions := oleutil.MustGetProperty(definition, "actions").ToIDispatch()
-			count := oleutil.MustGetProperty(actions, "count").Value().(int32)
-			for i := int32(1); i <= count; i++ {
-				// Get Action i
-				index := ole.NewVariant(ole.VT_I4, int64(i))
-				action := oleutil.MustGetProperty(actions, "item", &index).ToIDispatch()
-				if oleutil.MustGetProperty(action, "type").Value().(int32) != 0 { // only handle IExecAction
-					action.Release()
-					continue
-				}
-				t.ActionList = append(t.ActionList, ExecAction{
-					WorkingDirectory: oleutil.MustGetProperty(action, "workingDirectory").ToString(),
-					Path:             oleutil.MustGetProperty(action, "path").ToString(),
-					Arguments:        oleutil.MustGetProperty(action, "arguments").ToString(),
-				})
+		actions := oleutil.MustGetProperty(definition, "actions").ToIDispatch()
+		count := oleutil.MustGetProperty(actions, "count").Value().(int32)
+		for i := int32(1); i <= count; i++ {
+			// Get Action i
+			index := ole.NewVariant(ole.VT_I4, int64(i))
+			action := oleutil.MustGetProperty(actions, "item", &index).ToIDispatch()
+			if oleutil.MustGetProperty(action, "type").Value().(int32) != 0 { // only handle IExecAction
 				action.Release()
+				continue
 			}
+			t.ActionList = append(t.ActionList, ExecAction{
+				WorkingDirectory: oleutil.MustGetProperty(action, "workingDirectory").ToString(),
+				Path:             oleutil.MustGetProperty(action, "path").ToString(),
+				Arguments:        oleutil.MustGetProperty(action, "arguments").ToString(),
+			})
+			action.Release()
 		}
 		tasks = append(tasks, t)
-		definition.Release()
 		task.Release()
 	}
 	taskIterator.Release()
