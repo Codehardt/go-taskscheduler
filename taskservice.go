@@ -76,8 +76,8 @@ func getTasksRecursively(folder *ole.IDispatch) (tasks []Task) {
 			Name:        oleutil.MustGetProperty(task, "name").ToString(),
 			Path:        oleutil.MustGetProperty(task, "path").ToString(),
 			Enabled:     oleutil.MustGetProperty(task, "enabled").Value().(bool),
-			LastRunTime: oleutil.MustGetProperty(task, "nextRunTime").Value().(time.Time),
-			NextRunTime: oleutil.MustGetProperty(task, "lastRunTime").Value().(time.Time),
+			LastRunTime: oleutil.MustGetProperty(task, "lastRunTime").Value().(time.Time),
+			NextRunTime: oleutil.MustGetProperty(task, "nextRunTime").Value().(time.Time),
 		}
 		// Get more details, e.g. actions
 		definition := oleutil.MustGetProperty(task, "definition").ToIDispatch()
