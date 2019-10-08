@@ -49,54 +49,111 @@ func GetTasks() ([]Task, error) {
 		return nil, errors.New("Could not connect to Task Scheduler 2.0")
 	}
 	// Get Root Directory of Task Scheduler 2.0 and get all tasks recursively
-	root := oleutil.MustCallMethod(ts, "GetFolder", "\\").ToIDispatch()
+	variant, err := oleutil.CallMethod(ts, "GetFolder", "\\")
+	if err != nil {
+		return nil, errors.New("Could not get root folder in Task Scheduler 2.0")
+	}
+	root := variant.ToIDispatch()
 	defer root.Release()
 	return getTasksRecursively(root), nil
 }
 
 func getTasksRecursively(folder *ole.IDispatch) (tasks []Task) {
+	var (
+		variant *ole.VARIANT
+		err     error
+	)
 	// Get Tasks in subfolders first
-	folderIterator := oleutil.MustCallMethod(folder, "GetFolders", int64(0)).ToIDispatch()
-	for i := int32(1); i <= oleutil.MustGetProperty(folderIterator, "count").Value().(int32); i++ {
+	if variant, err = oleutil.CallMethod(folder, "GetFolders", int64(0)); err != nil {
+		return
+	}
+	folderIterator := variant.ToIDispatch()
+	if variant, err = oleutil.GetProperty(folderIterator, "count"); err != nil {
+		return
+	}
+	count, _ := variant.Value().(int32)
+	for i := int32(1); i <= count; i++ {
 		// Get Tasks of subfolder i
 		index := ole.NewVariant(ole.VT_I4, int64(i))
-		subfolder := oleutil.MustGetProperty(folderIterator, "item", &index).ToIDispatch()
+		if variant, err = oleutil.GetProperty(folderIterator, "item", &index); err != nil {
+			continue
+		}
+		subfolder := variant.ToIDispatch()
 		subtasks := getTasksRecursively(subfolder)
 		tasks = append(tasks, subtasks...)
 		subfolder.Release()
 	}
 	folderIterator.Release()
 	// Get Tasks
-	taskIterator := oleutil.MustCallMethod(folder, "GetTasks", int64(0)).ToIDispatch()
-	for i := int32(1); i <= oleutil.MustGetProperty(taskIterator, "count").Value().(int32); i++ {
+	if variant, err = oleutil.CallMethod(folder, "GetTasks", int64(0)); err != nil {
+		return
+	}
+	taskIterator := variant.ToIDispatch()
+	if variant, err = oleutil.GetProperty(taskIterator, "count"); err != nil {
+		return
+	}
+	count, _ = variant.Value().(int32)
+	for i := int32(1); i <= count; i++ {
 		// Get Task i
 		index := ole.NewVariant(ole.VT_I4, int64(i))
-		task := oleutil.MustGetProperty(taskIterator, "item", &index).ToIDispatch()
-		var t = Task{
-			Name:        oleutil.MustGetProperty(task, "name").ToString(),
-			Path:        oleutil.MustGetProperty(task, "path").ToString(),
-			Enabled:     oleutil.MustGetProperty(task, "enabled").Value().(bool),
-			LastRunTime: oleutil.MustGetProperty(task, "lastRunTime").Value().(time.Time),
-			NextRunTime: oleutil.MustGetProperty(task, "nextRunTime").Value().(time.Time),
+		if variant, err = oleutil.GetProperty(taskIterator, "item", &index); err != nil {
+			continue
+		}
+		task := variant.ToIDispatch()
+		var t Task
+		if variant, err = oleutil.GetProperty(task, "name"); err == nil {
+			t.Name = variant.ToString()
+		}
+		if variant, err = oleutil.GetProperty(task, "path"); err == nil {
+			t.Path = variant.ToString()
+		}
+		if variant, err = oleutil.GetProperty(task, "enabled"); err == nil {
+			t.Enabled, _ = variant.Value().(bool)
+		}
+		if variant, err = oleutil.GetProperty(task, "lastRunTime"); err == nil {
+			t.LastRunTime, _ = variant.Value().(time.Time)
+		}
+		if variant, err = oleutil.GetProperty(task, "nextRunTime"); err == nil {
+			t.NextRunTime, _ = variant.Value().(time.Time)
 		}
 		// Get more details, e.g. actions
-		definition := oleutil.MustGetProperty(task, "definition").ToIDispatch()
-		actions := oleutil.MustGetProperty(definition, "actions").ToIDispatch()
-		count := oleutil.MustGetProperty(actions, "count").Value().(int32)
-		for i := int32(1); i <= count; i++ {
-			// Get Action i
-			index := ole.NewVariant(ole.VT_I4, int64(i))
-			action := oleutil.MustGetProperty(actions, "item", &index).ToIDispatch()
-			if oleutil.MustGetProperty(action, "type").Value().(int32) != 0 { // only handle IExecAction
-				action.Release()
-				continue
+		if variant, err = oleutil.GetProperty(task, "definition"); err == nil {
+			definition := variant.ToIDispatch()
+			if variant, err = oleutil.GetProperty(definition, "actions"); err == nil {
+				actions := variant.ToIDispatch()
+				if variant, err = oleutil.GetProperty(actions, "count"); err == nil {
+					count2, _ := variant.Value().(int32)
+					for i := int32(1); i <= count2; i++ {
+						// Get Action i
+						index := ole.NewVariant(ole.VT_I4, int64(i))
+						if variant, err = oleutil.GetProperty(actions, "item", &index); err != nil {
+							continue
+						}
+						action := variant.ToIDispatch()
+						if variant, err = oleutil.GetProperty(action, "type"); err != nil {
+							action.Release()
+							continue
+						}
+						actionType, _ := variant.Value().(int32)
+						if actionType != 0 { // only handle IExecAction
+							action.Release()
+							continue
+						}
+						var a ExecAction
+						if variant, err = oleutil.GetProperty(action, "workingDirectory"); err == nil {
+							a.WorkingDirectory = variant.ToString()
+						}
+						if variant, err = oleutil.GetProperty(action, "path"); err == nil {
+							a.Path = variant.ToString()
+						}
+						if variant, err = oleutil.GetProperty(action, "arguments"); err == nil {
+							a.Arguments = variant.ToString()
+						}
+						t.ActionList = append(t.ActionList, a)
+						action.Release()
+					}
+				}
 			}
-			t.ActionList = append(t.ActionList, ExecAction{
-				WorkingDirectory: oleutil.MustGetProperty(action, "workingDirectory").ToString(),
-				Path:             oleutil.MustGetProperty(action, "path").ToString(),
-				Arguments:        oleutil.MustGetProperty(action, "arguments").ToString(),
-			})
-			action.Release()
 		}
 		tasks = append(tasks, t)
 		task.Release()
