@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
-	ole "github.com/go-ole/go-ole"
-	oleutil "github.com/go-ole/go-ole/oleutil"
+	"github.com/go-ole/go-ole"
+	"github.com/go-ole/go-ole/oleutil"
 )
 
 // Task is a task found in Windows Task Scheduler 2.0
@@ -28,7 +28,7 @@ type ExecAction struct {
 // GetTasks returns a list of all scheduled Tasks in Windows Task Scheduler 2.0
 func GetTasks() ([]Task, error) {
 	// Initialize COM API
-	if err := ole.CoInitialize(0); err != nil {
+	if err := ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED); err != nil {
 		return nil, errors.New("Could not initialize Windows COM API")
 	}
 	defer ole.CoUninitialize()
